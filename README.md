@@ -8,7 +8,6 @@ Multi-product Google Sheets content calendar scraper and prompt generator for GT
 - **Interactive Inspection Drawer**: Slide-over panel with full post details (hooks, visual directions, captions, hashtags, CTAs, and KPIs).
 - **Customizable Export Checklist**: Toggle individual sections to include in the generated Markdown or copy AI image generation prompts directly.
 - **Custom Calendar Date Picker**: Clean, modern date selector with month/year navigation and quick presets.
-- **Mock Mode Fallback**: Automatically provides realistic mock data when credentials are not configured.
 
 ## Tech Stack
 - **Framework**: Next.js 14 (App Router, TypeScript)
@@ -35,7 +34,6 @@ Multi-product Google Sheets content calendar scraper and prompt generator for GT
    GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
    GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
    GOOGLE_SHEETS_CONFIG='[{"productName":"Allbuddy","spreadsheetId":"your_spreadsheet_id","tabName":"weekly calendar"}]'
-   USE_MOCK_SHEETS=false
    ```
 
 3. **Run locally**:

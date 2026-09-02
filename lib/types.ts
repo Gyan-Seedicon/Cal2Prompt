@@ -27,7 +27,7 @@ export interface ProductSheetConfig {
 
 export interface CalendarApiResponse {
   success: boolean;
-  source: 'mock' | 'live';
+  source: 'live';
   date: string;
   totalMatches: number;
   data: ContentRow[];

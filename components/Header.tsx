@@ -4,12 +4,11 @@ import React from 'react';
 import { FileText } from 'lucide-react';
 
 interface HeaderProps {
-  dataSource: 'mock' | 'live';
   selectedDate: string;
   onSelectPreset: (date: string) => void;
 }
 
-export function Header({ dataSource, selectedDate, onSelectPreset }: HeaderProps) {
+export function Header({ selectedDate, onSelectPreset }: HeaderProps) {
   const todayStr = new Date().toISOString().split('T')[0];
 
   return (
@@ -25,18 +24,10 @@ export function Header({ dataSource, selectedDate, onSelectPreset }: HeaderProps
                 Content calendar scraper
               </h1>
               <span
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${
-                  dataSource === 'live'
-                    ? 'bg-emerald-50 text-emerald-800'
-                    : 'bg-orange-50 text-orange-800'
-                }`}
-                title={
-                  dataSource === 'live'
-                    ? 'Connected to live Google Sheets'
-                    : 'Running on realistic mock sheets for end-to-end preview'
-                }
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800"
+                title="Connected to live Google Sheets"
               >
-                {dataSource === 'live' ? '● Live sheets' : '● Mock mode'}
+                ● Live sheets
               </span>
             </div>
             <p className="text-xs text-stone-500 font-normal">

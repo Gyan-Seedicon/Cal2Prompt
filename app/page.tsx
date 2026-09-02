@@ -16,7 +16,6 @@ export default function CalendarScraperPage() {
   const [rows, setRows] = useState<ContentRow[]>([]);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [dataSource, setDataSource] = useState<'mock' | 'live'>('live');
 
   // Filter & UI states
   const [selectedProductFilter, setSelectedProductFilter] = useState<string>('ALL');
@@ -74,10 +73,6 @@ export default function CalendarScraperPage() {
 
     try {
       const res = await fetch(`/api/calendar?date=${encodeURIComponent(dateToFetch)}`);
-      const sourceHeader = res.headers.get('x-data-source');
-      if (sourceHeader === 'live' || sourceHeader === 'mock') {
-        setDataSource(sourceHeader);
-      }
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
@@ -153,7 +148,6 @@ export default function CalendarScraperPage() {
 
       {/* Header */}
       <Header
-        dataSource={dataSource}
         selectedDate={selectedDate}
         onSelectPreset={handleSelectPreset}
       />

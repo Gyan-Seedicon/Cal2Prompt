@@ -1,7 +1,6 @@
 import { google } from 'googleapis';
 import { ContentRow, ProductSheetConfig } from './types';
 import { parseSheetRows } from './sheets-parser';
-import { MOCK_PRODUCTS_DATA } from './mock-data';
 
 /**
  * Resolves configuration for products and their Google Spreadsheets.
@@ -66,10 +65,6 @@ export function resolveSheetsConfig(): ProductSheetConfig[] {
  * Checks if live Google credentials and sheet configs are properly available.
  */
 export function isGoogleSheetsConfigured(): boolean {
-  if (process.env.USE_MOCK_SHEETS === 'true') {
-    return false;
-  }
-
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY;
   const configs = resolveSheetsConfig();
@@ -106,33 +101,19 @@ function getSheetsClient() {
 }
 
 export interface FetchCalendarResult {
-  source: 'mock' | 'live';
+  source: 'live';
   rows: ContentRow[];
   warnings: string[];
 }
 
 /**
- * Fetches content rows matching targetDateYMD across all configured products/spreadsheets.
- * If live credentials are not set or USE_MOCK_SHEETS=true, serves realistic mock data.
+ * Fetches content rows matching targetDateYMD across all configured products/spreadsheets in real time.
  */
 export async function fetchCalendarRowsForDate(targetDateYMD: string): Promise<FetchCalendarResult> {
-  // If not configured for live access or mock forced, return mock data
   if (!isGoogleSheetsConfigured()) {
-    console.info(`[GoogleSheets] Running in MOCK DATA mode for date: ${targetDateYMD}`);
-    const allRows: ContentRow[] = [];
-    const warnings: string[] = [];
-
-    for (const [productName, rawValues] of Object.entries(MOCK_PRODUCTS_DATA)) {
-      const result = parseSheetRows(productName, rawValues, targetDateYMD);
-      allRows.push(...result.rows);
-      warnings.push(...result.warnings);
-    }
-
-    return {
-      source: 'mock',
-      rows: allRows,
-      warnings,
-    };
+    throw new Error(
+      'Google Sheets is not configured. Please provide GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, and GOOGLE_SHEETS_CONFIG in .env.local.'
+    );
   }
 
   // Live Google Sheets mode
@@ -199,7 +180,6 @@ export async function fetchCalendarRowsForDate(targetDateYMD: string): Promise<F
       const errorMsg = `[${config.productName}] Error reading spreadsheet ${config.spreadsheetId}: ${result.reason?.message || result.reason}`;
       console.warn(errorMsg);
       warnings.push(errorMsg);
-      // We skip/ignore this sheet instead of crashing the whole request
     }
   });
 
