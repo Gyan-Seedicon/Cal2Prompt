@@ -239,7 +239,7 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
             {DAY_NAMES.map((day) => (
               <div
                 key={day}
-                className="text-[10px] font-bold text-stone-400 tracking-wider"
+                className="text-xs font-bold text-stone-400 tracking-wider"
               >
                 {day}
               </div>
@@ -299,7 +299,7 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
           </div>
 
           {/* Calendar Quick Shortcuts Footer */}
-          <div className="flex items-center justify-between pt-3 mt-3 border-t border-stone-100 text-[11px]">
+          <div className="flex items-center justify-between pt-3 mt-3 border-t border-stone-100 text-xs">
             <button
               type="button"
               onClick={() => {

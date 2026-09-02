@@ -46,7 +46,7 @@ export function resolveSheetsConfig(): ProductSheetConfig[] {
     return configs;
   }
 
-  // Option 3: Single spreadsheet with multiple tabs (Product A, Product B, Product C, Product D)
+  // Option 3: Single spreadsheet with multiple tabs
   const singleSheetId = process.env.GOOGLE_SHEET_ID;
   const sheetTabs = process.env.GOOGLE_SHEET_TABS;
   if (singleSheetId && sheetTabs) {
@@ -82,22 +82,20 @@ export function isGoogleSheetsConfigured(): boolean {
 }
 
 /**
- * Retrieves Google Sheets client using Google Service Account JWT.
+ * Retrieves Google Auth JWT client for Google Sheets API.
  */
-function getSheetsClient() {
+function getGoogleAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
   let privateKey = process.env.GOOGLE_PRIVATE_KEY?.trim() || '';
 
   // Handle newline escaping in environment variable
   privateKey = privateKey.replace(/\\n/g, '\n');
 
-  const auth = new google.auth.JWT({
+  return new google.auth.JWT({
     email,
     key: privateKey,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
-
-  return google.sheets({ version: 'v4', auth });
 }
 
 export interface FetchCalendarResult {
@@ -116,9 +114,9 @@ export async function fetchCalendarRowsForDate(targetDateYMD: string): Promise<F
     );
   }
 
-  // Live Google Sheets mode
   const configs = resolveSheetsConfig();
-  const sheets = getSheetsClient();
+  const auth = getGoogleAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
   const allRows: ContentRow[] = [];
   const warnings: string[] = [];
 
@@ -127,7 +125,6 @@ export async function fetchCalendarRowsForDate(targetDateYMD: string): Promise<F
     configs.map(async (config) => {
       let resolvedTabName = config.tabName;
 
-      // Fetch spreadsheet metadata to discover exact tab names & handle case/whitespace differences
       try {
         const meta = await sheets.spreadsheets.get({
           spreadsheetId: config.spreadsheetId,
@@ -143,21 +140,19 @@ export async function fetchCalendarRowsForDate(targetDateYMD: string): Promise<F
             if (matchedSheet?.properties?.title) {
               resolvedTabName = matchedSheet.properties.title || undefined;
             } else {
-              // Fallback to first sheet if specified tab name isn't found
               resolvedTabName = (sheetList[0]?.properties?.title || config.tabName) || undefined;
             }
           } else {
-            // Default to first sheet
             resolvedTabName = sheetList[0]?.properties?.title || undefined;
           }
         }
-      } catch (metaErr) {
-        console.warn(`[GoogleSheets] Could not fetch metadata for ${config.productName}, using provided tab name:`, metaErr);
+      } catch (metaErr: unknown) {
+        console.warn(`[GoogleSheets] Could not fetch metadata for ${config.productName}:`, metaErr);
       }
 
       const cleanTabName = resolvedTabName ? resolvedTabName.replace(/'/g, "\\'") : '';
       const range = cleanTabName ? `'${cleanTabName}'!A1:ZZ` : 'A1:ZZ';
-      console.log(`[GoogleSheets] Fetching ${config.productName} from spreadsheet ${config.spreadsheetId} range ${range}`);
+      console.log(`[GoogleSheets] Fetching ${config.productName} from Google Sheet ${config.spreadsheetId} range ${range}`);
 
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: config.spreadsheetId,
