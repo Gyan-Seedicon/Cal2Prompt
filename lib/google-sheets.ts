@@ -105,9 +105,9 @@ export interface FetchCalendarResult {
 }
 
 /**
- * Fetches content rows matching targetDateYMD across all configured products/spreadsheets in real time.
+ * Fetches content rows matching targetDateYMD (single date, array of dates, or comma-separated dates) across all configured products/spreadsheets in real time.
  */
-export async function fetchCalendarRowsForDate(targetDateYMD: string): Promise<FetchCalendarResult> {
+export async function fetchCalendarRowsForDate(targetDateYMD: string | string[]): Promise<FetchCalendarResult> {
   if (!isGoogleSheetsConfigured()) {
     throw new Error(
       'Google Sheets is not configured. Please provide GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, and GOOGLE_SHEETS_CONFIG in .env.local.'
@@ -134,16 +134,29 @@ export async function fetchCalendarRowsForDate(targetDateYMD: string): Promise<F
         if (sheetList.length > 0) {
           if (config.tabName) {
             const cleanTarget = config.tabName.trim().toLowerCase();
-            const matchedSheet = sheetList.find(
+            // Try exact case-insensitive match (ignoring leading/trailing whitespace)
+            let matchedSheet = sheetList.find(
               (s) => s.properties?.title?.trim().toLowerCase() === cleanTarget
             );
+            // If not found, try partial match (e.g. "weekly calendar" vs "Weekly calendar ")
+            if (!matchedSheet) {
+              matchedSheet = sheetList.find((s) => {
+                const titleClean = s.properties?.title?.trim().toLowerCase() || '';
+                return titleClean.includes(cleanTarget) || cleanTarget.includes(titleClean);
+              });
+            }
             if (matchedSheet?.properties?.title) {
               resolvedTabName = matchedSheet.properties.title || undefined;
             } else {
-              resolvedTabName = (sheetList[0]?.properties?.title || config.tabName) || undefined;
+              resolvedTabName = sheetList[0]?.properties?.title || config.tabName || undefined;
             }
           } else {
-            resolvedTabName = sheetList[0]?.properties?.title || undefined;
+            // If tabName is not provided, look for a tab containing "weekly" or "calendar" first
+            const calendarSheet = sheetList.find((s) => {
+              const t = (s.properties?.title || '').toLowerCase();
+              return t.includes('weekly') || t.includes('calendar');
+            });
+            resolvedTabName = calendarSheet?.properties?.title || sheetList[0]?.properties?.title || undefined;
           }
         }
       } catch (metaErr: unknown) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { normalizeDateToYMD } from '@/lib/date-utils';
+import { normalizeDateToYMD, getDatesBetween } from '@/lib/date-utils';
 import { fetchCalendarRowsForDate } from '@/lib/google-sheets';
 
 export const dynamic = 'force-dynamic';
@@ -8,23 +8,48 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const rawDate = searchParams.get('date');
+    const rawDates = searchParams.get('dates');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
 
-    if (!rawDate) {
+    const targetDates: string[] = [];
+
+    // Case 1: Date range (startDate + endDate)
+    if (startDate && endDate) {
+      const normStart = normalizeDateToYMD(startDate);
+      const normEnd = normalizeDateToYMD(endDate);
+      if (normStart && normEnd) {
+        targetDates.push(...getDatesBetween(normStart, normEnd));
+      }
+    }
+
+    // Case 2: Comma-separated dates
+    if (rawDates) {
+      const splitDates = rawDates.split(',');
+      for (const d of splitDates) {
+        const norm = normalizeDateToYMD(d.trim());
+        if (norm && !targetDates.includes(norm)) {
+          targetDates.push(norm);
+        }
+      }
+    }
+
+    // Case 3: Single date
+    if (rawDate && targetDates.length === 0) {
+      const norm = normalizeDateToYMD(rawDate.trim());
+      if (norm) {
+        targetDates.push(norm);
+      }
+    }
+
+    if (targetDates.length === 0) {
       return NextResponse.json(
-        { error: 'Query parameter "date" is required (format: YYYY-MM-DD or e.g. 03 Sep 2026).' },
+        { error: 'Query parameter "date", "dates", or "startDate" & "endDate" is required (e.g. date=2026-09-03).' },
         { status: 400 }
       );
     }
 
-    const normalizedDate = normalizeDateToYMD(rawDate);
-    if (!normalizedDate) {
-      return NextResponse.json(
-        { error: `Invalid date format: "${rawDate}". Please provide a valid date like 2026-09-03 or "03 Sep 2026".` },
-        { status: 400 }
-      );
-    }
-
-    const result = await fetchCalendarRowsForDate(normalizedDate);
+    const result = await fetchCalendarRowsForDate(targetDates);
 
     // If no rows match any tab, return an empty array (not an error)
     return NextResponse.json(result.rows, {
@@ -32,7 +57,7 @@ export async function GET(request: NextRequest) {
       headers: {
         'x-data-source': result.source,
         'x-matched-count': String(result.rows.length),
-        'x-normalized-date': normalizedDate,
+        'x-target-dates': targetDates.join(','),
       },
     });
   } catch (err: unknown) {

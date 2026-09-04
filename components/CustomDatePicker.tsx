@@ -1,17 +1,23 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
-import { formatYMDToDisplay } from '@/lib/date-utils';
+import {
+  getTodayYMD,
+  getThisWeekRange,
+  getNext7DaysRange,
+  getDatesBetween,
+  formatDateSelectionDisplay,
+} from '@/lib/date-utils';
 
 interface CustomDatePickerProps {
-  value: string; // 'YYYY-MM-DD'
-  onChange: (value: string) => void;
+  selectedDates: string[]; // array of YYYY-MM-DD
+  onChangeDates: (dates: string[]) => void;
   id?: string;
 }
 
@@ -32,43 +38,41 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps) {
+export function CustomDatePicker({
+  selectedDates,
+  onChangeDates,
+  id = 'custom-date-picker',
+}: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Parse initial date or default to current date
-  const selectedDateObj = React.useMemo(() => {
-    if (!value) return new Date();
-    const [y, m, d] = value.split('-').map(Number);
+  // Range selection temporary state while user is clicking start & end date
+  const [rangeStart, setRangeStart] = useState<string | null>(null);
+
+  // Reference date for initial calendar view
+  const initialRefDate = useMemo(() => {
+    const firstDate = selectedDates[0] || getTodayYMD();
+    const [y, m, d] = firstDate.split('-').map(Number);
     if (!y || !m || !d) return new Date();
     return new Date(y, m - 1, d);
-  }, [value]);
+  }, [selectedDates]);
 
   // View state for the calendar month and year
-  const [viewYear, setViewYear] = useState(selectedDateObj.getFullYear());
-  const [viewMonth, setViewMonth] = useState(selectedDateObj.getMonth());
-
-  // Sync view when external value changes
-  useEffect(() => {
-    if (value) {
-      const [y, m] = value.split('-').map(Number);
-      if (y && m) {
-        setViewYear(y);
-        setViewMonth(m - 1);
-      }
-    }
-  }, [value]);
+  const [viewYear, setViewYear] = useState(initialRefDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initialRefDate.getMonth());
 
   // Close on outside click or Escape
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setRangeStart(null);
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsOpen(false);
+        setRangeStart(null);
       }
     };
 
@@ -108,12 +112,45 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
     const formattedMonth = String(month + 1).padStart(2, '0');
     const formattedDay = String(day).padStart(2, '0');
     const ymd = `${year}-${formattedMonth}-${formattedDay}`;
-    onChange(ymd);
-    setIsOpen(false);
+
+    if (!rangeStart) {
+      // First click: select single date and set as potential range start
+      setRangeStart(ymd);
+      onChangeDates([ymd]);
+    } else {
+      // Second click: create range between rangeStart and clicked date
+      const rangeDates = getDatesBetween(rangeStart, ymd);
+      onChangeDates(rangeDates);
+      setRangeStart(null);
+      setIsOpen(false);
+    }
   };
 
+  const handlePresetSelect = (dates: string[]) => {
+    onChangeDates(dates);
+    setRangeStart(null);
+    setIsOpen(false);
+
+    // Sync view year & month to first selected date
+    if (dates[0]) {
+      const [y, m] = dates[0].split('-').map(Number);
+      if (y && m) {
+        setViewYear(y);
+        setViewMonth(m - 1);
+      }
+    }
+  };
+
+  const todayStr = getTodayYMD();
+  const today = useMemo(() => new Date(), []);
+  const isCurrentViewMonthToday =
+    today.getFullYear() === viewYear && today.getMonth() === viewMonth;
+
+  // Selected date lookup set
+  const selectedDatesSet = useMemo(() => new Set(selectedDates), [selectedDates]);
+
   // Generate days matrix
-  const calendarDays = React.useMemo(() => {
+  const calendarDays = useMemo(() => {
     const firstDayIndex = new Date(viewYear, viewMonth, 1).getDay();
     const daysInCurrentMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
     const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
@@ -122,9 +159,11 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
       dayNumber: number;
       month: number;
       year: number;
+      ymd: string;
       isCurrentMonth: boolean;
       isSelected: boolean;
       isToday: boolean;
+      isRangeEndpoint: boolean;
     }> = [];
 
     // Previous month filler days
@@ -132,36 +171,37 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
       const d = daysInPrevMonth - i;
       const m = viewMonth === 0 ? 11 : viewMonth - 1;
       const y = viewMonth === 0 ? viewYear - 1 : viewYear;
+      const ymd = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       days.push({
         dayNumber: d,
         month: m,
         year: y,
+        ymd,
         isCurrentMonth: false,
-        isSelected: false,
+        isSelected: selectedDatesSet.has(ymd),
         isToday: false,
+        isRangeEndpoint: false,
       });
     }
 
     // Current month days
-    const today = new Date();
-    const isCurrentViewMonthToday =
-      today.getFullYear() === viewYear && today.getMonth() === viewMonth;
-
     for (let d = 1; d <= daysInCurrentMonth; d++) {
-      const isSelected =
-        selectedDateObj.getFullYear() === viewYear &&
-        selectedDateObj.getMonth() === viewMonth &&
-        selectedDateObj.getDate() === d;
-
+      const ymd = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isSelected = selectedDatesSet.has(ymd);
       const isToday = isCurrentViewMonthToday && today.getDate() === d;
+      const isRangeEndpoint =
+        selectedDates.length > 1 &&
+        (selectedDates[0] === ymd || selectedDates[selectedDates.length - 1] === ymd);
 
       days.push({
         dayNumber: d,
         month: viewMonth,
         year: viewYear,
+        ymd,
         isCurrentMonth: true,
         isSelected,
         isToday,
+        isRangeEndpoint,
       });
     }
 
@@ -170,21 +210,23 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
     for (let i = 1; i <= remainingSlots; i++) {
       const m = viewMonth === 11 ? 0 : viewMonth + 1;
       const y = viewMonth === 11 ? viewYear + 1 : viewYear;
+      const ymd = `${y}-${String(m + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       days.push({
         dayNumber: i,
         month: m,
         year: y,
+        ymd,
         isCurrentMonth: false,
-        isSelected: false,
+        isSelected: selectedDatesSet.has(ymd),
         isToday: false,
+        isRangeEndpoint: false,
       });
     }
 
     return days;
-  }, [viewYear, viewMonth, selectedDateObj]);
+  }, [viewYear, viewMonth, selectedDates, selectedDatesSet, isCurrentViewMonthToday, today]);
 
-  const displayFormatted = value ? formatYMDToDisplay(value) : 'Select date';
-  const todayStr = new Date().toISOString().split('T')[0];
+  const displayFormatted = formatDateSelectionDisplay(selectedDates);
 
   return (
     <div className="relative inline-block w-full" ref={containerRef}>
@@ -193,28 +235,60 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
         type="button"
         id={id}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-stone-50 hover:bg-stone-100/80 focus:bg-white text-stone-900 text-xs font-semibold rounded-lg px-3 py-2 border border-stone-200 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all flex items-center justify-between gap-2 shadow-xs cursor-pointer"
+        className="w-full bg-white hover:bg-stone-50/80 focus:bg-white text-stone-900 text-xs font-semibold rounded-lg px-3.5 py-2 border border-stone-200/90 focus:border-stone-400 outline-none transition-all flex items-center justify-between gap-2 shadow-2xs cursor-pointer"
       >
         <div className="flex items-center gap-2 truncate">
-          <CalendarIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+          <CalendarIcon className="w-3.5 h-3.5 text-stone-500 shrink-0" />
           <span className="truncate">{displayFormatted}</span>
         </div>
         <ChevronDown
           className={`w-3.5 h-3.5 text-stone-400 transition-transform duration-200 shrink-0 ${
-            isOpen ? 'rotate-180 text-orange-500' : ''
+            isOpen ? 'rotate-180 text-stone-700' : ''
           }`}
         />
       </button>
 
       {/* Custom Dropdown Calendar */}
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.12)] border border-stone-200 p-3.5 w-72 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute left-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-stone-200 p-4 w-80 animate-in fade-in zoom-in-95 duration-150 space-y-3">
+          {/* Quick Presets Bar */}
+          <div className="flex flex-wrap items-center gap-1.5 pb-2.5 border-b border-stone-100">
+            <button
+              type="button"
+              onClick={() => handlePresetSelect([todayStr])}
+              className="px-2.5 py-1 rounded-md text-xs font-semibold bg-stone-100 hover:bg-stone-200/80 text-stone-700 transition-colors cursor-pointer"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetSelect(getThisWeekRange(todayStr).dates)}
+              className="px-2.5 py-1 rounded-md text-xs font-semibold bg-orange-50 hover:bg-orange-100 text-orange-800 transition-colors cursor-pointer"
+            >
+              This week
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetSelect(getNext7DaysRange(todayStr).dates)}
+              className="px-2.5 py-1 rounded-md text-xs font-semibold bg-stone-100 hover:bg-stone-200/80 text-stone-700 transition-colors cursor-pointer"
+            >
+              Next 7 days
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetSelect(['2026-09-03'])}
+              className="px-2.5 py-1 rounded-md text-xs font-semibold text-orange-600 hover:bg-orange-50 transition-colors cursor-pointer"
+            >
+              Demo (03 Sep)
+            </button>
+          </div>
+
           {/* Month / Year Header Navigation */}
-          <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+          <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="p-1 rounded-md text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer"
               title="Previous month"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -227,7 +301,7 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
             <button
               type="button"
               onClick={handleNextMonth}
-              className="p-1 rounded-md text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer"
               title="Next month"
             >
               <ChevronRight className="w-4 h-4" />
@@ -235,7 +309,7 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
           </div>
 
           {/* Weekday Names */}
-          <div className="grid grid-cols-7 gap-1 text-center mt-2.5 mb-1.5">
+          <div className="grid grid-cols-7 gap-1 text-center mt-2 mb-1">
             {DAY_NAMES.map((day) => (
               <div
                 key={day}
@@ -249,35 +323,7 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
           {/* Days Grid */}
           <div className="grid grid-cols-7 gap-1 text-center">
             {calendarDays.map((item, idx) => {
-              if (item.isSelected) {
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() =>
-                      handleSelectDay(item.year, item.month, item.dayNumber)
-                    }
-                    className="h-7 w-7 mx-auto flex items-center justify-center rounded-lg bg-orange-500 text-white font-bold text-xs shadow-xs cursor-pointer"
-                  >
-                    {item.dayNumber}
-                  </button>
-                );
-              }
-
-              if (!item.isCurrentMonth) {
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() =>
-                      handleSelectDay(item.year, item.month, item.dayNumber)
-                    }
-                    className="h-7 w-7 mx-auto flex items-center justify-center rounded-lg text-stone-300 hover:text-stone-600 hover:bg-stone-50 text-xs transition-colors cursor-pointer"
-                  >
-                    {item.dayNumber}
-                  </button>
-                );
-              }
+              const isStart = rangeStart === item.ymd;
 
               return (
                 <button
@@ -286,10 +332,14 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
                   onClick={() =>
                     handleSelectDay(item.year, item.month, item.dayNumber)
                   }
-                  className={`h-7 w-7 mx-auto flex items-center justify-center rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    item.isToday
+                  className={`h-7 w-7 mx-auto flex items-center justify-center rounded-lg text-xs transition-colors cursor-pointer ${
+                    item.isSelected || isStart
+                      ? 'bg-orange-500 text-white font-bold shadow-xs'
+                      : !item.isCurrentMonth
+                      ? 'text-stone-300 hover:text-stone-600 hover:bg-stone-50'
+                      : item.isToday
                       ? 'text-orange-600 font-bold bg-orange-50 hover:bg-orange-100'
-                      : 'text-stone-700 hover:bg-stone-100 hover:text-stone-900'
+                      : 'text-stone-700 hover:bg-stone-100 hover:text-stone-900 font-medium'
                   }`}
                 >
                   {item.dayNumber}
@@ -298,28 +348,11 @@ export function CustomDatePicker({ value, onChange, id }: CustomDatePickerProps)
             })}
           </div>
 
-          {/* Calendar Quick Shortcuts Footer */}
-          <div className="flex items-center justify-between pt-3 mt-3 border-t border-stone-100 text-xs">
-            <button
-              type="button"
-              onClick={() => {
-                onChange(todayStr);
-                setIsOpen(false);
-              }}
-              className="text-stone-600 hover:text-stone-900 font-medium cursor-pointer"
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onChange('2026-09-03');
-                setIsOpen(false);
-              }}
-              className="text-orange-600 hover:text-orange-700 font-semibold cursor-pointer"
-            >
-              03 Sep 2026 (demo)
-            </button>
+          {/* Instruction hint */}
+          <div className="pt-2 border-t border-stone-100 text-[11px] text-stone-400 text-center">
+            {rangeStart
+              ? 'Click second date to complete range'
+              : 'Click once for single date, or click two dates for a range'}
           </div>
         </div>
       )}

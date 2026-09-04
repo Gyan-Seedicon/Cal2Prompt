@@ -1,67 +1,76 @@
 'use client';
 
 import React from 'react';
-import { FileText } from 'lucide-react';
+import { Calendar } from 'lucide-react';
+import { getTodayYMD, getThisWeekRange } from '@/lib/date-utils';
 
 interface HeaderProps {
-  selectedDate: string;
-  onSelectPreset: (date: string) => void;
+  selectedDates: string[];
+  onSelectDates: (dates: string[]) => void;
 }
 
-export function Header({ selectedDate, onSelectPreset }: HeaderProps) {
-  const todayStr = new Date().toISOString().split('T')[0];
+export function Header({ selectedDates, onSelectDates }: HeaderProps) {
+  const todayStr = getTodayYMD();
+  const thisWeekDates = getThisWeekRange(todayStr).dates;
 
   return (
-    <header className="bg-white/90 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)] sticky top-0 z-40 border-b border-stone-100">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+    <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-stone-200/60 shadow-2xs">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center shadow-xs text-white">
-            <FileText className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center shadow-xs text-white">
+            <Calendar className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold tracking-tight text-stone-900">
-                Content calendar scraper
+              <h1 className="text-sm sm:text-base font-bold tracking-tight text-stone-900">
+                Cal2Prompt
               </h1>
               <span
-                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800"
+                className="text-xs font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/60"
                 title="Connected to live Google Sheets"
               >
-                ● Live sheets
+                ● 4 Live sheets
               </span>
             </div>
-            <p className="text-xs text-stone-500 font-normal">
-              Multi-product calendar parser & instant copy markdown generator
+            <p className="text-xs text-stone-500 font-normal hidden sm:block">
+              Scrape calendar posts & generate prompts in 1-click
             </p>
           </div>
         </div>
 
-        {/* Quick Date Presets */}
+        {/* Header Quick Links */}
         <div className="flex items-center gap-1.5 text-xs">
-          <span className="text-stone-400 font-medium hidden sm:inline mr-1">Presets:</span>
           <button
             type="button"
-            id="preset-demo-date"
-            onClick={() => onSelectPreset('2026-09-03')}
-            className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-              selectedDate === '2026-09-03'
-                ? 'bg-orange-500 text-white shadow-xs font-semibold'
-                : 'bg-stone-100 hover:bg-stone-200/70 text-stone-600 font-medium'
-            }`}
-          >
-            03 Sep 2026 (demo)
-          </button>
-          <button
-            type="button"
-            id="preset-today"
-            onClick={() => onSelectPreset(todayStr)}
-            className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
-              selectedDate === todayStr
-                ? 'bg-orange-500 text-white shadow-xs font-semibold'
-                : 'bg-stone-100 hover:bg-stone-200/70 text-stone-600 font-medium'
+            id="header-preset-today"
+            onClick={() => onSelectDates([todayStr])}
+            className={`px-2.5 py-1 rounded-md text-xs transition-all cursor-pointer ${
+              selectedDates.length === 1 && selectedDates[0] === todayStr
+                ? 'bg-stone-900 text-white font-semibold shadow-2xs'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100 font-medium'
             }`}
           >
             Today
+          </button>
+          <button
+            type="button"
+            id="header-preset-this-week"
+            onClick={() => onSelectDates(thisWeekDates)}
+            className="px-2.5 py-1 rounded-md text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-100 font-medium transition-all cursor-pointer"
+          >
+            This week
+          </button>
+          <button
+            type="button"
+            id="header-preset-demo"
+            onClick={() => onSelectDates(['2026-09-03'])}
+            className={`px-2.5 py-1 rounded-md text-xs transition-all cursor-pointer ${
+              selectedDates.length === 1 && selectedDates[0] === '2026-09-03'
+                ? 'bg-orange-500 text-white font-semibold shadow-2xs'
+                : 'text-orange-700 bg-orange-50/80 hover:bg-orange-100/80 font-medium'
+            }`}
+          >
+            Demo
           </button>
         </div>
       </div>

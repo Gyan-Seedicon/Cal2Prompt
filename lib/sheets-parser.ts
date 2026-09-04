@@ -15,64 +15,128 @@ function normalizeHeaderName(header: string): string {
 }
 
 /**
- * Maps a normalized header text to a canonical field key.
+ * Maps a normalized header text to a canonical field key case-insensitively and flexibly.
  */
 function mapHeaderToField(cleanHeader: string): CanonicalField | null {
   switch (cleanHeader) {
     case 'week':
+    case 'weeks':
       return 'week';
+
     case 'day':
+    case 'day of week':
+    case 'posting day':
       return 'day';
+
     case 'date':
+    case 'planned posting date':
+    case 'posting date':
+    case 'publish date':
+    case 'scheduled date':
       return 'date';
+
     case 'platform':
+    case 'channels':
+    case 'channel':
       return 'platform';
+
     case 'content pillar':
     case 'pillar':
+    case 'theme':
+    case 'content theme':
       return 'contentPillar';
+
     case 'post hook / title':
     case 'post hook/title':
+    case 'hook / title':
+    case 'hook/title':
     case 'post hook':
-    case 'title':
     case 'hook':
+    case 'post title':
+    case 'title':
+    case 'headline':
+    case 'main hook':
       return 'postHook';
+
     case 'content intent':
     case 'intent':
+    case 'post intent':
+    case 'objective':
+    case 'goal':
       return 'contentIntent';
+
     case 'target audience':
     case 'audience':
+    case 'persona':
       return 'targetAudience';
+
     case 'content type':
     case 'type':
+    case 'post type':
+    case 'format':
       return 'contentType';
+
+    case 'detailed caption / copy':
+    case 'detailed caption/copy':
+    case 'caption / copy':
+    case 'caption/copy':
     case 'detailed caption':
     case 'caption':
+    case 'post copy':
+    case 'copy':
+    case 'post content':
+    case 'content':
       return 'detailedCaption';
+
     case 'visual direction':
-    case 'visual':
     case 'visuals':
+    case 'visual':
+    case 'creative direction':
+    case 'design direction':
+    case 'image idea':
       return 'visualDirection';
+
     case 'hashtags':
     case 'hashtag':
+    case 'tags':
       return 'hashtags';
+
     case 'cta':
     case 'call to action':
+    case 'call-to-action':
       return 'cta';
+
     case 'primary kpi':
     case 'primary kpis':
+    case 'primary metric':
+    case 'kpi':
+    case 'kpis':
       return 'primaryKPI';
+
     case 'secondary kpi':
     case 'secondary kpis':
+    case 'secondary metric':
       return 'secondaryKPI';
+
     case 'ai image generation prompt':
     case 'ai image prompt':
     case 'image generation prompt':
     case 'image prompt':
+    case 'ai prompt':
+    case 'visual prompt':
+    case 'midjourney prompt':
+    case 'prompt':
       return 'aiImagePrompt';
+
     case 'document name':
     case 'doc name':
     case 'document':
+    case 'doc code':
+    case 'document code':
+    case 'post id':
+    case 'id':
       return 'documentName';
+
     default:
       return null;
   }
@@ -85,12 +149,12 @@ export interface ParseSheetResult {
 
 /**
  * Parses raw 2D array of rows from Google Sheets into structured ContentRow objects,
- * filtered by the requested target date (YYYY-MM-DD).
+ * filtered by the requested target date(s) (YYYY-MM-DD).
  */
 export function parseSheetRows(
   productName: string,
   rawValues: unknown[][],
-  targetDateYMD: string
+  targetDateYMD: string | string[]
 ): ParseSheetResult {
   const warnings: string[] = [];
 
@@ -98,6 +162,13 @@ export function parseSheetRows(
     warnings.push(`[${productName}] Sheet is empty or contains no data rows.`);
     return { rows: [], warnings };
   }
+
+  // Build target date set
+  const targetDateSet = new Set(
+    Array.isArray(targetDateYMD)
+      ? targetDateYMD.map((d) => d.trim()).filter(Boolean)
+      : String(targetDateYMD).split(',').map((d) => d.trim()).filter(Boolean)
+  );
 
   // Find the header row (check first 10 rows for the row containing 'date')
   let headerRowIndex = -1;
@@ -162,7 +233,7 @@ export function parseSheetRows(
     const rawDateVal = rowValues[fieldIndexMap.date];
     if (!rawDateVal) continue;
 
-    // Check if this row is another header row (e.g. repeated monthly header row like row 30)
+    // Check if this row is another header row (e.g. repeated monthly header row like row 13 or row 30)
     if (String(rawDateVal).trim().toLowerCase() === 'date') {
       rowValues.forEach((rawH, colIdx) => {
         if (typeof rawH === 'string' && rawH.trim()) {
@@ -182,8 +253,8 @@ export function parseSheetRows(
       continue;
     }
 
-    // Filter by requested date
-    if (rowNormalizedYMD === targetDateYMD) {
+    // Filter by requested date(s)
+    if (targetDateSet.has(rowNormalizedYMD)) {
       const getVal = (field: CanonicalField): string => {
         const idx = fieldIndexMap[field];
         if (idx === undefined || idx >= rowValues.length) return '';
@@ -215,6 +286,14 @@ export function parseSheetRows(
       matchedRows.push(contentRow);
     }
   }
+
+  // Sort matched rows chronologically by date ascending, then product name
+  matchedRows.sort((a, b) => {
+    const ymdA = normalizeDateToYMD(a.date) || '';
+    const ymdB = normalizeDateToYMD(b.date) || '';
+    if (ymdA !== ymdB) return ymdA.localeCompare(ymdB);
+    return a.product.localeCompare(b.product);
+  });
 
   return { rows: matchedRows, warnings };
 }

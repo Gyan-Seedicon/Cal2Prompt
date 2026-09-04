@@ -1,7 +1,7 @@
 /**
  * Robust date normalization utilities for Google Sheet date columns.
  * Supports variants like:
- * - "03 Sep 2026", "3 Sep 2026", "03-Sep-2026", "3rd Sep 2026"
+ * - "03 Sep 2026", "3 Sep 2026", "03-Sep-2026", "3rd Sep 2026", "Sat 15 Aug 2026"
  * - "September 3, 2026", "Sep 3, 2026"
  * - "2026-09-03", "2026/09/03", "2026.09.03"
  * - "09/03/2026", "03/09/2026"
@@ -23,6 +23,22 @@ const MONTH_MAP: Record<string, string> = {
   nov: '11', november: '11',
   dec: '12', december: '12',
 };
+
+const MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * Returns today's date in local 'YYYY-MM-DD' format.
+ */
+export function getTodayYMD(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 /**
  * Normalizes any recognized date representation to 'YYYY-MM-DD'.
@@ -51,8 +67,9 @@ export function normalizeDateToYMD(rawDate: unknown): string | null {
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
 
-  // Clean string: remove commas, dots, and ordinal suffixes (1st, 2nd, 3rd, 4th...)
+  // Clean string: remove day-of-week prefixes, ordinal suffixes (1st, 2nd, 3rd, 4th...), commas, dots
   const cleaned = str
+    .replace(/^(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)[,\.\s]+/gi, '')
     .replace(/(\d+)(st|nd|rd|th)/gi, '$1')
     .replace(/[,\.]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -146,14 +163,125 @@ function expandYear(y: string): string {
  * Formats YYYY-MM-DD into human-friendly "03 Sep 2026"
  */
 export function formatYMDToDisplay(ymd: string): string {
+  if (!ymd) return '';
   const parts = ymd.split('-');
   if (parts.length !== 3) return ymd;
   const [y, m, d] = parts;
-  const monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
   const monthIndex = parseInt(m, 10) - 1;
-  const monthName = monthNames[monthIndex] || m;
+  const monthName = MONTH_NAMES[monthIndex] || m;
   return `${d.padStart(2, '0')} ${monthName} ${y}`;
+}
+
+/**
+ * Generates an array of all dates (YYYY-MM-DD) between startYMD and endYMD inclusive.
+ */
+export function getDatesBetween(startYMD: string, endYMD: string): string[] {
+  if (!startYMD) return [];
+  if (!endYMD || startYMD === endYMD) return [startYMD];
+
+  const [y1, m1, d1] = startYMD.split('-').map(Number);
+  const [y2, m2, d2] = endYMD.split('-').map(Number);
+
+  const start = new Date(y1, m1 - 1, d1);
+  const end = new Date(y2, m2 - 1, d2);
+
+  // If start is after end, swap them
+  const [fromDate, toDate] = start <= end ? [start, end] : [end, start];
+
+  const dates: string[] = [];
+  const current = new Date(fromDate);
+
+  // Safety cap at 60 days
+  let count = 0;
+  while (current <= toDate && count < 60) {
+    const y = current.getFullYear();
+    const m = String(current.getMonth() + 1).padStart(2, '0');
+    const d = String(current.getDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${d}`);
+    current.setDate(current.getDate() + 1);
+    count++;
+  }
+
+  return dates;
+}
+
+/**
+ * Gets "This Week" (Monday to Sunday) date range around the given date or current date.
+ */
+export function getThisWeekRange(referenceDateYMD?: string): { start: string; end: string; dates: string[] } {
+  const ref = referenceDateYMD ? new Date(referenceDateYMD + 'T00:00:00') : new Date();
+  const dayOfWeek = ref.getDay(); // 0 = Sunday, 1 = Monday, ...
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+
+  const monday = new Date(ref);
+  monday.setDate(ref.getDate() + diffToMonday);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const format = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const start = format(monday);
+  const end = format(sunday);
+  return {
+    start,
+    end,
+    dates: getDatesBetween(start, end),
+  };
+}
+
+/**
+ * Gets "Next 7 Days" date range starting from the given date or current date.
+ */
+export function getNext7DaysRange(referenceDateYMD?: string): { start: string; end: string; dates: string[] } {
+  const ref = referenceDateYMD ? new Date(referenceDateYMD + 'T00:00:00') : new Date();
+  const next7 = new Date(ref);
+  next7.setDate(ref.getDate() + 6);
+
+  const format = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const start = format(ref);
+  const end = format(next7);
+  return {
+    start,
+    end,
+    dates: getDatesBetween(start, end),
+  };
+}
+
+/**
+ * Formats a list or range of dates for clean UI display.
+ */
+export function formatDateSelectionDisplay(dates: string[]): string {
+  if (!dates || dates.length === 0) return 'Select date';
+  if (dates.length === 1) return formatYMDToDisplay(dates[0]);
+
+  // If contiguous range
+  const sorted = [...dates].sort();
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+
+  const isContiguous = getDatesBetween(first, last).length === sorted.length;
+  if (isContiguous) {
+    const [y1, m1, d1] = first.split('-');
+    const [y2, m2, d2] = last.split('-');
+
+    if (y1 === y2 && m1 === m2) {
+      const monthName = MONTH_NAMES[parseInt(m1, 10) - 1];
+      return `${d1.padStart(2, '0')} – ${d2.padStart(2, '0')} ${monthName} ${y1} (${dates.length} days)`;
+    }
+    return `${formatYMDToDisplay(first)} – ${formatYMDToDisplay(last)} (${dates.length} days)`;
+  }
+
+  return `${formatYMDToDisplay(first)} + ${dates.length - 1} more (${dates.length} dates)`;
 }

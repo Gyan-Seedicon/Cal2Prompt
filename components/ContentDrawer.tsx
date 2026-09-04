@@ -27,6 +27,8 @@ interface ContentDrawerProps {
   onClose: () => void;
   onCopy: (text: string, label: string, key: string) => void;
   copiedKey: string | null;
+  isDone?: boolean;
+  onToggleDone?: (row: ContentRow) => void;
 }
 
 export function ContentDrawer({
@@ -35,6 +37,8 @@ export function ContentDrawer({
   onClose,
   onCopy,
   copiedKey,
+  isDone = false,
+  onToggleDone,
 }: ContentDrawerProps) {
   const [exportOptions, setExportOptions] = useState<MarkdownExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const [showRawMarkdown, setShowRawMarkdown] = useState<boolean>(false);
@@ -127,21 +131,36 @@ export function ContentDrawer({
             {/* Top Bar: Badges & Close Button */}
             <div className="flex items-start justify-between gap-3 pb-4 border-b border-stone-100">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-orange-50 text-orange-800 border border-orange-100">
+                {onToggleDone && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleDone(row)}
+                    className={`w-6 h-6 rounded-md flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                      isDone
+                        ? 'bg-emerald-500 border-2 border-emerald-500 text-white shadow-2xs'
+                        : 'border-2 border-stone-300 hover:border-orange-500 bg-white hover:bg-orange-50/40 text-transparent'
+                    }`}
+                    title={isDone ? 'Mark as pending' : 'Mark as completed'}
+                  >
+                    <Check className={`w-4 h-4 stroke-[3] ${isDone ? 'block' : 'opacity-0 hover:opacity-40 text-stone-400'}`} />
+                  </button>
+                )}
+
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-orange-50 text-orange-800 border border-orange-200/80">
                   {row.product}
                 </span>
                 <span
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${getPlatformStyle(
+                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-md border ${getPlatformStyle(
                     row.platform
                   )}`}
                 >
                   {row.platform || 'Platform'}
                 </span>
-                <span className="text-xs font-mono font-medium text-stone-600 bg-stone-100 px-2.5 py-1 rounded-md border border-stone-200">
+                <span className="text-xs font-mono font-medium text-stone-600 bg-stone-100 px-2.5 py-0.5 rounded-md border border-stone-200/80">
                   {displayId}
                 </span>
                 {row.contentType && (
-                  <span className="text-xs font-normal px-2.5 py-1 rounded-md bg-stone-100 text-stone-700">
+                  <span className="text-xs font-normal px-2.5 py-0.5 rounded-md bg-stone-100 text-stone-600 border border-stone-200/60">
                     {row.contentType}
                   </span>
                 )}

@@ -1,24 +1,36 @@
 'use client';
 
 import React from 'react';
-import { Search, Layers } from 'lucide-react';
+import {
+  Layers,
+  RotateCcw,
+  CheckCircle2,
+  RefreshCw,
+} from 'lucide-react';
 import { CustomDatePicker } from './CustomDatePicker';
+import {
+  getTodayYMD,
+  getThisWeekRange,
+  getNext7DaysRange,
+} from '@/lib/date-utils';
 
 interface SearchBarProps {
-  selectedDate: string;
-  onChangeDate: (date: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
+  selectedDates: string[];
+  onChangeDates: (dates: string[]) => void;
+  onSubmit: (e?: React.FormEvent) => void;
   loading: boolean;
   totalRows: number;
   productNames: string[];
   productCounts: Map<string, number>;
   selectedFilter: string;
   onSelectFilter: (filter: string) => void;
+  completedCount: number;
+  onClearCompleted: () => void;
 }
 
 export function SearchBar({
-  selectedDate,
-  onChangeDate,
+  selectedDates,
+  onChangeDates,
   onSubmit,
   loading,
   totalRows,
@@ -26,80 +38,142 @@ export function SearchBar({
   productCounts,
   selectedFilter,
   onSelectFilter,
+  completedCount,
+  onClearCompleted,
 }: SearchBarProps) {
-  return (
-    <section className="bg-white rounded-xl p-4 sm:p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-stone-100">
-      <form
-        onSubmit={onSubmit}
-        className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
-          <div className="text-xs font-bold text-stone-600 shrink-0">
-            Target date
-          </div>
+  const todayStr = getTodayYMD();
+  const thisWeekRange = getThisWeekRange(todayStr);
+  const next7DaysRange = getNext7DaysRange(todayStr);
 
-          <div className="flex-1 max-w-xs">
+  const handleQuickPreset = (dates: string[]) => {
+    onChangeDates(dates);
+  };
+
+  const isTodayActive =
+    selectedDates.length === 1 && selectedDates[0] === todayStr;
+  const isThisWeekActive =
+    selectedDates.length > 1 &&
+    JSON.stringify(selectedDates) === JSON.stringify(thisWeekRange.dates);
+  const isNext7DaysActive =
+    selectedDates.length > 1 &&
+    JSON.stringify(selectedDates) === JSON.stringify(next7DaysRange.dates);
+  const isDemoActive =
+    selectedDates.length === 1 && selectedDates[0] === '2026-09-03';
+
+  return (
+    <div className="space-y-4">
+      {/* Top Surface Bar: Date Picker + Quick Presets + Sync */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Left: Date Picker + Refresh */}
+        <div className="flex items-center gap-2 max-w-sm w-full">
+          <div className="flex-1">
             <CustomDatePicker
               id="custom-date-picker"
-              value={selectedDate}
-              onChange={onChangeDate}
+              selectedDates={selectedDates}
+              onChangeDates={onChangeDates}
             />
           </div>
-
           <button
-            type="submit"
-            id="get-content-btn"
-            disabled={loading || !selectedDate}
-            className="inline-flex items-center justify-center gap-1.5 bg-orange-500 hover:bg-orange-600 active:scale-[0.99] disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-xs transition-all cursor-pointer"
+            type="button"
+            id="refresh-sheets-btn"
+            onClick={() => onSubmit()}
+            disabled={loading}
+            className="p-2 bg-white hover:bg-stone-100 active:scale-95 text-stone-600 hover:text-stone-900 rounded-lg border border-stone-200/80 shadow-xs transition-all cursor-pointer shrink-0 disabled:opacity-50"
+            title="Refresh & sync live sheets"
           >
-            {loading ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                <span>Pulling sheets...</span>
-              </>
-            ) : (
-              <>
-                <Search className="w-3.5 h-3.5" />
-                <span>Get content for this date</span>
-              </>
-            )}
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-orange-500' : ''}`}
+            />
           </button>
         </div>
-      </form>
 
-      {/* Product Filter Pills */}
+        {/* Right: Quick Range Presets */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <button
+            type="button"
+            id="preset-today"
+            onClick={() => handleQuickPreset([todayStr])}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              isTodayActive
+                ? 'bg-stone-900 text-white shadow-xs'
+                : 'bg-white hover:bg-stone-100 text-stone-600 border border-stone-200/80'
+            }`}
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            id="preset-this-week"
+            onClick={() => handleQuickPreset(thisWeekRange.dates)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              isThisWeekActive
+                ? 'bg-stone-900 text-white shadow-xs'
+                : 'bg-white hover:bg-stone-100 text-stone-600 border border-stone-200/80'
+            }`}
+          >
+            This week
+          </button>
+          <button
+            type="button"
+            id="preset-next-7-days"
+            onClick={() => handleQuickPreset(next7DaysRange.dates)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              isNext7DaysActive
+                ? 'bg-stone-900 text-white shadow-xs'
+                : 'bg-white hover:bg-stone-100 text-stone-600 border border-stone-200/80'
+            }`}
+          >
+            Next 7 days
+          </button>
+          <button
+            type="button"
+            id="preset-demo"
+            onClick={() => handleQuickPreset(['2026-09-03'])}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              isDemoActive
+                ? 'bg-orange-500 text-white shadow-xs'
+                : 'bg-orange-50/80 hover:bg-orange-100/80 text-orange-800 border border-orange-200/60'
+            }`}
+          >
+            03 Sep (demo)
+          </button>
+        </div>
+      </div>
+
+      {/* Surface Filters & Completion Tracker */}
       {totalRows > 0 && (
-        <>
-          <div className="h-px bg-stone-100 my-3.5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs pt-1">
+          {/* Product Filter Tabs */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-medium text-stone-400 mr-1 flex items-center gap-1">
-              <Layers className="w-3 h-3 text-stone-400" />
+            <span className="text-stone-400 font-medium mr-1 flex items-center gap-1 text-xs">
+              <Layers className="w-3.5 h-3.5 text-stone-400" />
               Products:
             </span>
             <button
               type="button"
               id="filter-all"
               onClick={() => onSelectFilter('ALL')}
-              className={`text-xs px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              className={`text-xs px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                 selectedFilter === 'ALL'
                   ? 'bg-stone-900 text-white font-semibold shadow-xs'
-                  : 'bg-stone-100 hover:bg-stone-200/70 text-stone-600 font-medium'
+                  : 'bg-white hover:bg-stone-100 text-stone-600 border border-stone-200/80 font-medium'
               }`}
             >
-              All products ({totalRows})
+              All ({totalRows})
             </button>
             {productNames.map((prodName) => {
               const count = productCounts.get(prodName) || 0;
+              const isSelected = selectedFilter === prodName;
               return (
                 <button
                   key={prodName}
                   type="button"
                   id={`filter-${prodName.toLowerCase().replace(/\s+/g, '-')}`}
                   onClick={() => onSelectFilter(prodName)}
-                  className={`text-xs px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                    selectedFilter === prodName
-                      ? 'bg-orange-500 text-white font-semibold shadow-xs'
-                      : 'bg-stone-100 hover:bg-stone-200/70 text-stone-600 font-medium'
+                  className={`text-xs px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-stone-900 text-white font-semibold shadow-xs'
+                      : 'bg-white hover:bg-stone-100 text-stone-600 border border-stone-200/80 font-medium'
                   }`}
                 >
                   {prodName} ({count})
@@ -107,8 +181,40 @@ export function SearchBar({
               );
             })}
           </div>
-        </>
+
+          {/* Completion Status */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-stone-200/80 text-stone-700 text-xs shadow-2xs">
+              <CheckCircle2
+                className={`w-3.5 h-3.5 ${
+                  completedCount > 0 ? 'text-emerald-600' : 'text-stone-400'
+                }`}
+              />
+              <span>
+                Completed:{' '}
+                <strong className="text-stone-900 font-bold">
+                  {completedCount}
+                </strong>
+                /{totalRows}
+              </span>
+            </div>
+
+            {completedCount > 0 && (
+              <button
+                type="button"
+                id="reset-completed-btn"
+                onClick={onClearCompleted}
+                className="text-stone-400 hover:text-stone-700 font-medium text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                title="Reset completion status"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
+        </div>
       )}
-    </section>
+    </div>
   );
 }
+

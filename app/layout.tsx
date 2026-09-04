@@ -10,9 +10,14 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Content Calendar Scraper | Google Sheet to Prompt',
+  title: 'Cal2Prompt | Content Calendar to AI Prompts',
   description:
     'Internal tool for querying Google Sheet content calendars across multiple product spreadsheets and generating clean, copy-ready Markdown and AI image prompts.',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

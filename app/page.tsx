@@ -3,15 +3,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar as CalendarIcon, ArrowRight, AlertCircle } from 'lucide-react';
 import { ContentRow } from '@/lib/types';
-import { formatYMDToDisplay } from '@/lib/date-utils';
+import {
+  getTodayYMD,
+  getThisWeekRange,
+  formatDateSelectionDisplay,
+} from '@/lib/date-utils';
 import { Header } from '@/components/Header';
 import { SearchBar } from '@/components/SearchBar';
 import { ContentCard } from '@/components/ContentCard';
 import { ContentDrawer } from '@/components/ContentDrawer';
 import { Toast } from '@/components/Toast';
 
+const STORAGE_KEY = 'cal2prompt_done_posts';
+
 export default function CalendarScraperPage() {
-  const [selectedDate, setSelectedDate] = useState<string>('2026-09-03');
+  // Initialize with today's date by default
+  const [selectedDates, setSelectedDates] = useState<string[]>([getTodayYMD()]);
   const [loading, setLoading] = useState<boolean>(false);
   const [rows, setRows] = useState<ContentRow[]>([]);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
@@ -22,13 +29,65 @@ export default function CalendarScraperPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Persistent Todo / Done Map: { [postKey]: boolean }
+  const [completedMap, setCompletedMap] = useState<Record<string, boolean>>({});
+
   // Drawer state for selected card
   const [selectedDrawerRow, setSelectedDrawerRow] = useState<ContentRow | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
-  // Trigger initial fetch for default date on mount
+  // Load persistent todo state from localStorage
   useEffect(() => {
-    fetchContentForDate('2026-09-03');
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed === 'object' && parsed !== null) {
+          setCompletedMap(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read todo state from localStorage:', e);
+    }
+  }, []);
+
+  // Generate a stable unique key for a post
+  const getPostKey = (row: ContentRow): string => {
+    return `${row.product}__${row.documentName || ''}__${row.date}__${row.platform}__${(row.postHook || '').slice(0, 30)}`;
+  };
+
+  // Toggle todo / done state and persist to localStorage
+  const handleToggleDone = (row: ContentRow) => {
+    const key = getPostKey(row);
+    setCompletedMap((prev) => {
+      const updated = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Could not save todo state to localStorage:', e);
+      }
+      return updated;
+    });
+
+    const willBeDone = !completedMap[key];
+    showToast(willBeDone ? 'Post marked as completed!' : 'Post marked as pending');
+  };
+
+  // Clear all completed posts
+  const handleClearCompleted = () => {
+    setCompletedMap({});
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      showToast('Completed status reset');
+    } catch (e) {
+      console.warn('Could not reset todo state in localStorage:', e);
+    }
+  };
+
+  // Trigger initial fetch for today's date automatically on landing
+  useEffect(() => {
+    const today = getTodayYMD();
+    fetchContentForDates([today]);
   }, []);
 
   const showToast = (msg: string) => {
@@ -65,14 +124,15 @@ export default function CalendarScraperPage() {
     }
   };
 
-  const fetchContentForDate = async (dateToFetch: string) => {
-    if (!dateToFetch) return;
+  const fetchContentForDates = async (datesToFetch: string[]) => {
+    if (!datesToFetch || datesToFetch.length === 0) return;
     setLoading(true);
     setError(null);
     setHasSearched(true);
 
     try {
-      const res = await fetch(`/api/calendar?date=${encodeURIComponent(dateToFetch)}`);
+      const datesParam = datesToFetch.join(',');
+      const res = await fetch(`/api/calendar?dates=${encodeURIComponent(datesParam)}`);
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
@@ -91,14 +151,9 @@ export default function CalendarScraperPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchContentForDate(selectedDate);
-  };
-
-  const handleSelectPreset = (date: string) => {
-    setSelectedDate(date);
-    fetchContentForDate(date);
+  const handleSelectPresetDates = (dates: string[]) => {
+    setSelectedDates(dates);
+    fetchContentForDates(dates);
   };
 
   // Group rows by product
@@ -132,6 +187,11 @@ export default function CalendarScraperPage() {
     return rows.filter((r) => r.product === selectedProductFilter);
   }, [rows, selectedProductFilter]);
 
+  // Count completed posts in current result set
+  const completedCount = useMemo(() => {
+    return rows.filter((r) => completedMap[getPostKey(r)]).length;
+  }, [rows, completedMap]);
+
   const handleOpenDrawer = (row: ContentRow) => {
     setSelectedDrawerRow(row);
     setIsDrawerOpen(true);
@@ -141,6 +201,8 @@ export default function CalendarScraperPage() {
     setIsDrawerOpen(false);
   };
 
+  const dateDisplayLabel = formatDateSelectionDisplay(selectedDates);
+
   return (
     <div className="min-h-screen bg-[#fcfbfa] text-stone-800 flex flex-col font-sans selection:bg-orange-100 selection:text-orange-950">
       {/* Toast Notification */}
@@ -148,23 +210,25 @@ export default function CalendarScraperPage() {
 
       {/* Header */}
       <Header
-        selectedDate={selectedDate}
-        onSelectPreset={handleSelectPreset}
+        selectedDates={selectedDates}
+        onSelectDates={handleSelectPresetDates}
       />
 
       {/* Main Container */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-7">
-        {/* Search & Filter Bar */}
+        {/* Surface Search & Filter Bar */}
         <SearchBar
-          selectedDate={selectedDate}
-          onChangeDate={setSelectedDate}
-          onSubmit={handleSubmit}
+          selectedDates={selectedDates}
+          onChangeDates={handleSelectPresetDates}
+          onSubmit={() => fetchContentForDates(selectedDates)}
           loading={loading}
           totalRows={rows.length}
           productNames={allProductNames}
           productCounts={productCounts}
           selectedFilter={selectedProductFilter}
           onSelectFilter={setSelectedProductFilter}
+          completedCount={completedCount}
+          onClearCompleted={handleClearCompleted}
         />
 
         {/* Error Alert */}
@@ -181,12 +245,12 @@ export default function CalendarScraperPage() {
         {/* Loading Skeletons */}
         {loading && (
           <div className="space-y-3">
-            <div className="h-4 w-40 bg-stone-200/70 rounded-md animate-pulse" />
+            <div className="h-4 w-44 bg-stone-200/70 rounded-md animate-pulse" />
             <div className="grid grid-cols-1 gap-3">
               {[1, 2, 3].map((n) => (
                 <div
                   key={n}
-                  className="bg-white rounded-xl p-5 space-y-3 shadow-xs border border-stone-100 animate-pulse"
+                  className="bg-white rounded-xl p-5 space-y-3 shadow-xs border border-stone-200/70 animate-pulse"
                 >
                   <div className="flex justify-between">
                     <div className="flex gap-2">
@@ -205,40 +269,45 @@ export default function CalendarScraperPage() {
 
         {/* Empty State */}
         {!loading && hasSearched && rows.length === 0 && !error && (
-          <div className="bg-white rounded-xl p-10 text-center max-w-lg mx-auto shadow-xs border border-stone-100">
-            <div className="w-12 h-12 rounded-lg bg-orange-50 flex items-center justify-center mx-auto mb-3.5 text-orange-500 shadow-xs">
+          <div className="bg-white rounded-xl p-10 text-center max-w-lg mx-auto shadow-xs border border-stone-200/80 space-y-3">
+            <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center mx-auto text-orange-500 shadow-xs border border-orange-100">
               <CalendarIcon className="w-6 h-6" />
             </div>
-            <h2 className="text-sm font-semibold text-stone-800" id="empty-state-text">
-              No content scheduled for this date.
+            <h2 className="text-sm sm:text-base font-bold text-stone-900" id="empty-state-text">
+              No content scheduled for {dateDisplayLabel}
             </h2>
-            <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto leading-relaxed">
-              No matching rows were found across the configured product spreadsheets for{' '}
-              <span className="text-stone-800 font-semibold">
-                {formatYMDToDisplay(selectedDate)}
-              </span>
-              .
+            <p className="text-xs text-stone-500 max-w-sm mx-auto leading-relaxed">
+              No matching rows were found across the 4 configured spreadsheets for this date selection.
             </p>
-            <button
-              type="button"
-              onClick={() => handleSelectPreset('2026-09-03')}
-              className="mt-4 text-xs text-orange-600 hover:text-orange-700 font-semibold inline-flex items-center gap-1.5 hover:underline underline-offset-4 cursor-pointer"
-            >
-              Try date with scheduled posts (03 Sep 2026) <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleSelectPresetDates(getThisWeekRange().dates)}
+                className="text-xs text-stone-700 bg-stone-100 hover:bg-stone-200/80 font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                Search This Week
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPresetDates(['2026-09-03'])}
+                className="text-xs text-orange-600 bg-orange-50 hover:bg-orange-100 font-semibold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                Try 03 Sep 2026 (demo) <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
 
         {/* Cards Grid */}
         {!loading && filteredRows.length > 0 && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs text-stone-500 px-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500 px-1">
               <span>
                 Displaying{' '}
-                <strong className="text-stone-900 font-semibold">{filteredRows.length}</strong> content{' '}
+                <strong className="text-stone-900 font-bold">{filteredRows.length}</strong> content{' '}
                 {filteredRows.length === 1 ? 'item' : 'items'} for{' '}
-                <strong className="text-orange-600 font-semibold">
-                  {formatYMDToDisplay(selectedDate)}
+                <strong className="text-orange-600 font-bold">
+                  {dateDisplayLabel}
                 </strong>
               </span>
               <span>
@@ -254,16 +323,23 @@ export default function CalendarScraperPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              {filteredRows.map((row, idx) => (
-                <ContentCard
-                  key={`card-${row.product}-${idx}`}
-                  row={row}
-                  index={idx}
-                  onOpenDrawer={handleOpenDrawer}
-                  onCopy={copyToClipboard}
-                  copiedKey={copiedKey}
-                />
-              ))}
+              {filteredRows.map((row, idx) => {
+                const postKey = getPostKey(row);
+                const isDone = Boolean(completedMap[postKey]);
+
+                return (
+                  <ContentCard
+                    key={`card-${row.product}-${row.date}-${idx}`}
+                    row={row}
+                    index={idx}
+                    onOpenDrawer={handleOpenDrawer}
+                    onCopy={copyToClipboard}
+                    copiedKey={copiedKey}
+                    isDone={isDone}
+                    onToggleDone={handleToggleDone}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
@@ -276,13 +352,14 @@ export default function CalendarScraperPage() {
         onClose={handleCloseDrawer}
         onCopy={copyToClipboard}
         copiedKey={copiedKey}
+        isDone={selectedDrawerRow ? Boolean(completedMap[getPostKey(selectedDrawerRow)]) : false}
+        onToggleDone={handleToggleDone}
       />
 
       {/* Footer */}
-      <footer className="py-7 text-center text-xs text-stone-400 mt-auto">
+      <footer className="py-7 text-center text-xs text-stone-400 mt-auto border-t border-stone-100">
         <p>
-          Content calendar scraper • Single internal tool • Google Sheets read-only sync • Zero
-          database
+          Cal2Prompt • Google Sheets real-time synchronization • Allbuddy · Deckwale · FWC · Seedicon
         </p>
       </footer>
     </div>
